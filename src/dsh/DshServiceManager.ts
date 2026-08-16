@@ -182,10 +182,10 @@ export class DshServiceManager {
     let args: string[];
 
     if (mode === 'npx') {
-      command = isWin ? 'npx.cmd' : 'npx';
+      command = 'npx';
       args = ['--yes', cfg.dshPackage, 'web', '--port', String(port)];
     } else {
-      command = isWin ? `${cfg.dshCommand}.cmd` : cfg.dshCommand;
+      command = cfg.dshCommand;
       args = ['web', '--port', String(port)];
     }
 
