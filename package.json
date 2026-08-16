@@ -1,0 +1,208 @@
+{
+  "name": "easy-vsc-gui-for-dsh",
+  "displayName": "Easy VSC GUI for DSH",
+  "description": "Open DeepSeek Harness (dsh) Web UI in a VS Code auxiliary side bar, with port sync, theme follow and workspace-aware startup.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dubykun888/EasyVSCGuiForDsh.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "webui",
+    "auxiliarybar"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:easyVscGuiForDsh.open",
+    "onCommand:easyVscGuiForDsh.stopDsh",
+    "onCommand:easyVscGuiForDsh.openInBrowser",
+    "onCommand:easyVscGuiForDsh.syncPortToPlugin",
+    "onCommand:easyVscGuiForDsh.syncPortToDsh",
+    "onView:easyVscGuiForDsh.view"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "easyVscGuiForDsh.open",
+        "title": "Open DSH GUI",
+        "category": "DSH",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "easyVscGuiForDsh.stopDsh",
+        "title": "Stop DSH Server",
+        "category": "DSH",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "easyVscGuiForDsh.openInBrowser",
+        "title": "Open DSH in Browser",
+        "category": "DSH",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "easyVscGuiForDsh.syncPortToPlugin",
+        "title": "Sync Local DSH Port to Plugin",
+        "category": "DSH",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "easyVscGuiForDsh.syncPortToDsh",
+        "title": "Sync Plugin Port to Local DSH",
+        "category": "DSH",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "easyVscGuiForDsh.refresh",
+        "title": "Refresh DSH Sidebar",
+        "category": "DSH",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "easyVscGuiForDsh.open",
+          "when": "editorTextFocus || resourceScheme == file",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "easyVscGuiForDsh.refresh",
+          "when": "view == easyVscGuiForDsh.view",
+          "group": "navigation"
+        },
+        {
+          "command": "easyVscGuiForDsh.openInBrowser",
+          "when": "view == easyVscGuiForDsh.view",
+          "group": "navigation"
+        },
+        {
+          "command": "easyVscGuiForDsh.syncPortToPlugin",
+          "when": "view == easyVscGuiForDsh.view",
+          "group": "navigation"
+        },
+        {
+          "command": "easyVscGuiForDsh.syncPortToDsh",
+          "when": "view == easyVscGuiForDsh.view",
+          "group": "navigation"
+        },
+        {
+          "command": "easyVscGuiForDsh.stopDsh",
+          "when": "view == easyVscGuiForDsh.view && easyVscGuiForDsh.managedRunning",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "easyVscGuiForDsh.stopDsh",
+          "when": "easyVscGuiForDsh.managedRunning"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "auxiliarybar": [
+        {
+          "id": "easyVscGuiForDsh",
+          "title": "DSH",
+          "icon": "media/dsh.svg"
+        }
+      ]
+    },
+    "views": {
+      "auxiliarybar": [
+        {
+          "type": "webview",
+          "id": "easyVscGuiForDsh.view",
+          "name": "DSH GUI",
+          "icon": "media/dsh.svg"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Easy VSC GUI for DSH",
+      "properties": {
+        "easyVscGuiForDsh.port": {
+          "type": "number",
+          "default": 3080,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port used to connect/start the dsh web UI. Defaults to 3080."
+        },
+        "easyVscGuiForDsh.startMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "npx",
+            "global"
+          ],
+          "default": "auto",
+          "description": "How to start dsh when it is not running. auto prefers npx and falls back to global dsh."
+        },
+        "easyVscGuiForDsh.dshPackage": {
+          "type": "string",
+          "default": "@deepseek-ai/dsh",
+          "description": "npm package name/version used for npx temporary startup, e.g. @deepseek-ai/dsh or @deepseek-ai/dsh@0.1.0-rc.6."
+        },
+        "easyVscGuiForDsh.startTimeout": {
+          "type": "number",
+          "default": 60,
+          "minimum": 5,
+          "maximum": 300,
+          "description": "Seconds to wait for dsh to become ready before reporting a timeout."
+        },
+        "easyVscGuiForDsh.stopDshOnVscClose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Stop a plugin-started dsh process when VS Code exits. External dsh processes are never stopped."
+        },
+        "easyVscGuiForDsh.themeFollow": {
+          "type": "string",
+          "enum": [
+            "vscode",
+            "system",
+            "dsh"
+          ],
+          "default": "vscode",
+          "description": "Theme behavior for the embedded dsh UI. vscode follows the active VS Code theme."
+        },
+        "easyVscGuiForDsh.autoOpenLastChat": {
+          "type": "boolean",
+          "default": true,
+          "description": "When the current VS Code folder is a dsh workspace, try to open its most recent chat."
+        },
+        "easyVscGuiForDsh.dshCommand": {
+          "type": "string",
+          "default": "dsh",
+          "description": "Custom global dsh command/path used when startMode is global or as fallback."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package:local": "npm run compile && vsce package --no-dependencies --out easy-vsc-gui-for-dsh.vsix",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.1",
+    "typescript": "^5.5.4"
+  }
+}
