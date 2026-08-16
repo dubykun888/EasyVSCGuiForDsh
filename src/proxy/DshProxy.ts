@@ -82,6 +82,17 @@ export class DshProxy {
     });
   }
 
+  private upstreamHeaders(headers: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
+    const result: http.OutgoingHttpHeaders = { ...headers, host: `127.0.0.1:${this.upstreamPort}` };
+    if (typeof result.origin === 'string') {
+      result.origin = `http://127.0.0.1:${this.upstreamPort}`;
+    }
+    if (typeof result.referer === 'string') {
+      result.referer = `http://127.0.0.1:${this.upstreamPort}/`;
+    }
+    return result;
+  }
+
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
     const upstream = http.request(
       {
@@ -89,7 +100,7 @@ export class DshProxy {
         port: this.upstreamPort,
         path: req.url ?? '/',
         method: req.method,
-        headers: { ...req.headers, host: `127.0.0.1:${this.upstreamPort}` },
+        headers: this.upstreamHeaders(req.headers),
       },
       (upRes) => {
         const headers = { ...upRes.headers };
@@ -148,7 +159,7 @@ export class DshProxy {
 
   private handleUpgrade(req: http.IncomingMessage, socket: import('stream').Duplex, head: Buffer): void {
     const upstream = net.connect(this.upstreamPort, '127.0.0.1', () => {
-      const headers = { ...req.headers, host: `127.0.0.1:${this.upstreamPort}` };
+      const headers = this.upstreamHeaders(req.headers);
       const headerLines = Object.entries(headers).map(([key, value]) => {
         const v = Array.isArray(value) ? value.join(', ') : String(value);
         return `${key}: ${v}`;

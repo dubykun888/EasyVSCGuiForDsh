@@ -37,6 +37,16 @@ async function main() {
   if (!/preference = "dark"/.test(html)) {
     throw new Error('Proxy did not rewrite theme bootstrap');
   }
+
+  // 5. API trust fence: pickDirectory through the proxy must not 403.
+  const pickStatus = await postStatus(`http://127.0.0.1:${proxyPort}/api/host.pickDirectory`, {
+    Origin: `http://127.0.0.1:${proxyPort}`,
+    'Sec-Fetch-Site': 'same-origin',
+  });
+  console.log('pickDirectory proxy status:', pickStatus);
+  if (pickStatus === 403) {
+    throw new Error('Proxy still triggers HTTP 403 on /api/host.pickDirectory');
+  }
   await proxy.stop();
 
   console.log('SMOKE OK');
@@ -49,6 +59,21 @@ function getText(url) {
       res.on('data', (c) => (data += c));
       res.on('end', () => resolve(data));
     }).on('error', reject);
+  });
+}
+
+function postStatus(url, headers) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      url,
+      { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers } },
+      (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      }
+    );
+    req.on('error', reject);
+    req.end(JSON.stringify({}));
   });
 }
 
