@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 编辑器标签栏右上角按钮快速打开右侧辅助侧栏。
+- 编辑器标签栏右上角按钮快速打开右侧辅助侧栏（WebviewPanel 并移动到 Secondary Side Bar）。
 - 自动检测 dsh：
   - 未安装：提示安装 `@deepseek-ai/dsh`。
   - 已安装未启动：优先使用 `npx --yes @deepseek-ai/dsh web --port <port>` 临时启动，失败回退全局 `dsh`。
@@ -47,5 +47,5 @@ npm run package:local   # 生成 easy-vsc-gui-for-dsh.vsix
 
 ## 风险与兼容
 
-- 需要较新版本 VS Code 以支持 auxiliary bar；旧版本会自动回退为右侧 WebviewPanel。
+- 使用 WebviewPanel + `workbench.action.moveEditorToSecondarySideBar` 放入右侧 Secondary Side Bar；旧版本或不支持该命令时保持为右侧 Beside 面板。
 - dsh 为 RC 版本，CLI/API 可能变化；dsh 相关逻辑集中在 `src/dsh` 便于适配。

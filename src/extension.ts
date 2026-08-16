@@ -2,15 +2,13 @@ import * as vscode from 'vscode';
 import { getConfig, setConfigPort } from './config';
 import { DshServiceManager } from './dsh/DshServiceManager';
 import { DshProxy } from './proxy/DshProxy';
-import { DshWebviewProvider } from './webview/DshWebviewProvider';
 import { getWebviewTheme } from './webview/theme';
 import { WorkspaceAdapter } from './workspace/WorkspaceAdapter';
 import { log, showOutput } from './util/logger';
 
 let serviceManager: DshServiceManager;
-let webviewProvider: DshWebviewProvider;
 let statusBarItem: vscode.StatusBarItem;
-let fallbackPanel: vscode.WebviewPanel | undefined;
+let sidePanel: vscode.WebviewPanel | undefined;
 let proxy: DshProxy | undefined;
 let currentPort = 3080;
 let currentBaseUrl = '';
@@ -24,37 +22,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   currentPort = getConfig().port;
 
-  webviewProvider = new DshWebviewProvider({
-    getUrl: () => buildFrameUrl(),
-    getTheme: () => getWebviewTheme(),
-    onOpenInBrowser: () => void openInBrowser(),
-    onStopDsh: () => void stopDsh(),
-    onSyncPortToPlugin: () => void syncPortToPlugin(),
-    onRefresh: () => webviewProvider.refresh(),
-  });
-
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(DshWebviewProvider.viewType, webviewProvider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    })
-  );
-
   context.subscriptions.push(
     vscode.commands.registerCommand('easyVscGuiForDsh.open', () => openDshGui(workspaceAdapter)),
     vscode.commands.registerCommand('easyVscGuiForDsh.stopDsh', () => stopDsh()),
     vscode.commands.registerCommand('easyVscGuiForDsh.openInBrowser', () => openInBrowser()),
     vscode.commands.registerCommand('easyVscGuiForDsh.syncPortToPlugin', () => syncPortToPlugin()),
     vscode.commands.registerCommand('easyVscGuiForDsh.syncPortToDsh', () => syncPortToDsh()),
-    vscode.commands.registerCommand('easyVscGuiForDsh.refresh', () => webviewProvider.refresh())
+    vscode.commands.registerCommand('easyVscGuiForDsh.refresh', () => updateSidePanel())
   );
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveColorTheme(() => {
       const theme = getWebviewTheme();
-      webviewProvider.updateTheme(theme);
       if (proxy) {
         proxy.setTheme(theme === 'dark' || theme === 'high-contrast' ? 'dark' : 'light');
       }
+      updateSidePanel();
     })
   );
 
@@ -82,13 +65,13 @@ async function openDshGui(workspaceAdapter: WorkspaceAdapter): Promise<void> {
     const cfg = getConfig();
     currentSessionId = cfg.autoOpenLastChat ? workspaceInfo.lastSessionId : undefined;
     await updateProxyForTheme();
-    webviewProvider.updateUrl(buildFrameUrl());
+    updateSidePanel();
 
     if (cfg.autoOpenLastChat && workspaceInfo.isDshWorkspace) {
       log(`Workspace detected, dsh started with cwd=${workspaceInfo.folder?.uri.fsPath}, session=${currentSessionId ?? 'none'}`);
     }
 
-    await revealSidebar();
+    await openSidePanel();
     await updateStatusBar();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -102,47 +85,104 @@ async function openDshGui(workspaceAdapter: WorkspaceAdapter): Promise<void> {
   }
 }
 
-async function revealSidebar(): Promise<void> {
+async function openSidePanel(): Promise<void> {
+  if (sidePanel) {
+    sidePanel.reveal(vscode.ViewColumn.Beside);
+  } else {
+    sidePanel = vscode.window.createWebviewPanel(
+      'easyVscGuiForDsh.sidePanel',
+      'DSH GUI',
+      vscode.ViewColumn.Beside,
+      { enableScripts: true, retainContextWhenHidden: true }
+    );
+    sidePanel.onDidDispose(() => {
+      sidePanel = undefined;
+    });
+    sidePanel.webview.onDidReceiveMessage((message) => {
+      switch (message.type) {
+        case 'openInBrowser':
+          void openInBrowser();
+          break;
+        case 'stopDsh':
+          void stopDsh();
+          break;
+        case 'syncPortToPlugin':
+          void syncPortToPlugin();
+          break;
+        case 'refresh':
+          updateSidePanel();
+          break;
+      }
+    });
+  }
+  updateSidePanel();
+  // Move the editor/webview into the secondary side bar (right auxiliary bar).
   try {
-    await vscode.commands.executeCommand('easyVscGuiForDsh.view.focus');
+    await vscode.commands.executeCommand('workbench.action.moveEditorToSecondarySideBar');
   } catch {
-    try {
-      await vscode.commands.executeCommand('workbench.view.extension.easyVscGuiForDsh');
-      await vscode.commands.executeCommand('easyVscGuiForDsh.view.focus');
-    } catch {
-      openFallbackPanel();
-    }
+    // Fallback: keep the webview as a Beside editor panel on the right.
   }
 }
 
-function openFallbackPanel(): void {
-  if (fallbackPanel) {
-    fallbackPanel.reveal(vscode.ViewColumn.Beside);
+function updateSidePanel(): void {
+  if (!sidePanel) {
     return;
   }
-  fallbackPanel = vscode.window.createWebviewPanel(
-    'easyVscGuiForDsh.fallback',
-    'DSH GUI',
-    vscode.ViewColumn.Beside,
-    { enableScripts: true, retainContextWhenHidden: true }
-  );
-  fallbackPanel.webview.html = fallbackHtml(currentPort);
-  fallbackPanel.onDidDispose(() => {
-    fallbackPanel = undefined;
-  });
+  sidePanel.webview.html = sidePanelHtml();
 }
 
-function fallbackHtml(port: number): string {
+function sidePanelHtml(): string {
   const nonce = getNonce();
   const url = buildFrameUrl();
+  const theme = getWebviewTheme();
+  const bodyClass = theme === 'dark' || theme === 'high-contrast' ? 'vscode-dark' : 'vscode-light';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; frame-src http://127.0.0.1:*;">
-<style>html,body{height:100%;margin:0}iframe{width:100%;height:100%;border:none}</style>
+<style>
+  html,body{height:100%;margin:0;font-family:var(--vscode-font-family)}
+  body.vscode-dark{background:#1e1e1e;color:#cccccc}
+  body.vscode-light{background:#ffffff;color:#333333}
+  #toolbar{display:flex;gap:6px;padding:6px 8px;border-bottom:1px solid var(--vscode-panel-border,#ccc);align-items:center}
+  #toolbar button{background:transparent;border:1px solid var(--vscode-button-border,transparent);color:var(--vscode-button-foreground,#333);cursor:pointer;padding:3px 8px;border-radius:4px;font-size:12px}
+  #toolbar button:hover{background:var(--vscode-toolbar-hoverBackground,#eee)}
+  #frameWrap{position:relative;height:calc(100% - 37px)}
+  iframe{width:100%;height:100%;border:none;display:block}
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--vscode-descriptionForeground,#888)}
+</style>
 </head>
-<body><iframe src="${url}"></iframe></body>
+<body class="${bodyClass}">
+<div id="toolbar">
+  <button id="refresh">刷新</button>
+  <button id="browser">浏览器打开</button>
+  <button id="sync">同步本地端口</button>
+  <button id="stop">停止 dsh</button>
+</div>
+<div id="frameWrap">
+  <div id="loading">Loading DSH…</div>
+  <iframe id="dshFrame" src="${url}" allow="clipboard-read; clipboard-write"></iframe>
+</div>
+<script nonce="${nonce}">
+  const vscode = acquireVsCodeApi();
+  const frame = document.getElementById('dshFrame');
+  const loading = document.getElementById('loading');
+  frame.addEventListener('load', () => { loading.style.display = 'none'; });
+  document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({type:'refresh'}));
+  document.getElementById('browser').addEventListener('click', () => vscode.postMessage({type:'openInBrowser'}));
+  document.getElementById('sync').addEventListener('click', () => vscode.postMessage({type:'syncPortToPlugin'}));
+  document.getElementById('stop').addEventListener('click', () => vscode.postMessage({type:'stopDsh'}));
+  window.addEventListener('message', (event) => {
+    const msg = event.data;
+    if (msg && msg.type === 'setUrl') {
+      frame.src = msg.url;
+      loading.style.display = 'flex';
+    }
+  });
+  vscode.postMessage({type:'ready'});
+</script>
+</body>
 </html>`;
 }
 
@@ -208,7 +248,7 @@ async function syncPortToPlugin(): Promise<void> {
   }
   currentPort = port;
   await updateProxyForTheme();
-  webviewProvider.updateUrl(buildFrameUrl());
+  updateSidePanel();
   vscode.window.showInformationMessage(`已将插件端口同步为本地 dsh 端口 ${port}。`);
   await updateStatusBar();
 }
@@ -250,7 +290,7 @@ async function promptForPort(): Promise<void> {
   await setConfigPort(port);
   currentPort = port;
   await updateProxyForTheme();
-  webviewProvider.updateUrl(buildFrameUrl());
+  updateSidePanel();
   vscode.window.showInformationMessage(`端口已设置为 ${port}。请重新点击打开 DSH GUI。`);
 }
 

@@ -29,8 +29,7 @@
     "onCommand:easyVscGuiForDsh.stopDsh",
     "onCommand:easyVscGuiForDsh.openInBrowser",
     "onCommand:easyVscGuiForDsh.syncPortToPlugin",
-    "onCommand:easyVscGuiForDsh.syncPortToDsh",
-    "onView:easyVscGuiForDsh.view"
+    "onCommand:easyVscGuiForDsh.syncPortToDsh"
   ],
   "contributes": {
     "commands": [
@@ -79,56 +78,10 @@
           "group": "navigation"
         }
       ],
-      "view/title": [
-        {
-          "command": "easyVscGuiForDsh.refresh",
-          "when": "view == easyVscGuiForDsh.view",
-          "group": "navigation"
-        },
-        {
-          "command": "easyVscGuiForDsh.openInBrowser",
-          "when": "view == easyVscGuiForDsh.view",
-          "group": "navigation"
-        },
-        {
-          "command": "easyVscGuiForDsh.syncPortToPlugin",
-          "when": "view == easyVscGuiForDsh.view",
-          "group": "navigation"
-        },
-        {
-          "command": "easyVscGuiForDsh.syncPortToDsh",
-          "when": "view == easyVscGuiForDsh.view",
-          "group": "navigation"
-        },
-        {
-          "command": "easyVscGuiForDsh.stopDsh",
-          "when": "view == easyVscGuiForDsh.view && easyVscGuiForDsh.managedRunning",
-          "group": "navigation"
-        }
-      ],
       "commandPalette": [
         {
           "command": "easyVscGuiForDsh.stopDsh",
           "when": "easyVscGuiForDsh.managedRunning"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "auxiliarybar": [
-        {
-          "id": "easyVscGuiForDsh",
-          "title": "DSH",
-          "icon": "media/dsh.svg"
-        }
-      ]
-    },
-    "views": {
-      "auxiliarybar": [
-        {
-          "type": "webview",
-          "id": "easyVscGuiForDsh.view",
-          "name": "DSH GUI",
-          "icon": "media/dsh.svg"
         }
       ]
     },
@@ -196,13 +149,17 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node ./out/test/runTest.js",
     "package:local": "npm run compile && vsce package --no-dependencies --out easy-vsc-gui-for-dsh.vsix",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.2.1",
+    "mocha": "^11.8.0",
     "typescript": "^5.5.4"
   }
 }

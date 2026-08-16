@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { WebviewTheme } from './DshWebviewProvider';
+
+export type WebviewTheme = 'light' | 'dark' | 'high-contrast';
 
 export function getWebviewTheme(theme = vscode.window.activeColorTheme): WebviewTheme {
   switch (theme.kind) {
