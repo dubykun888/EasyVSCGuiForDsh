@@ -2,6 +2,8 @@
 
 在 VS Code 辅助侧栏（右侧）内嵌 DeepSeek Harness (dsh) WebUI，提供快速打开、自动启动/连接、端口同步、主题跟随与工作区感知能力。
 
+![Preview](media/logo.png)
+
 ## 功能
 
 - 编辑器标签栏右上角按钮快速打开右侧辅助侧栏（WebviewPanel 并移动到 Secondary Side Bar）。

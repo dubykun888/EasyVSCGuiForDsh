@@ -39,7 +39,7 @@
         "command": "easyVscGuiForDsh.open",
         "title": "Open DSH GUI",
         "category": "DSH",
-        "icon": "$(browser)"
+        "icon": "media/deepseek.svg"
       },
       {
         "command": "easyVscGuiForDsh.stopDsh",

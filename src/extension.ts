@@ -8,6 +8,7 @@ import { log, showOutput } from './util/logger';
 
 let serviceManager: DshServiceManager;
 let workspaceAdapter: WorkspaceAdapter;
+let extensionUri: vscode.Uri;
 let statusBarItem: vscode.StatusBarItem;
 let sidePanel: vscode.WebviewPanel | undefined;
 let proxy: DshProxy | undefined;
@@ -22,6 +23,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   serviceManager = new DshServiceManager();
   workspaceAdapter = new WorkspaceAdapter();
+  extensionUri = context.extensionUri;
 
   currentPort = getConfig().port;
 
@@ -102,6 +104,7 @@ async function openSidePanel(state: SidePanelState = 'webui'): Promise<void> {
       vscode.ViewColumn.Beside,
       { enableScripts: true, retainContextWhenHidden: true }
     );
+    sidePanel.iconPath = vscode.Uri.joinPath(extensionUri, 'media', 'deepseek.svg');
     sidePanel.onDidDispose(() => {
       sidePanel = undefined;
     });
