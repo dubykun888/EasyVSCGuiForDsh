@@ -2,7 +2,7 @@
 
 在 VS Code 辅助侧栏（右侧）内嵌 DeepSeek Harness (dsh) WebUI，提供快速打开、自动启动/连接、端口同步、主题跟随与工作区感知能力。
 
-![Preview](media/logo.png)
+![Preview](https://raw.githubusercontent.com/dubykun888/EasyVSCGuiForDsh/main/media/logo.png)
 
 ## 功能
 
