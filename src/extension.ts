@@ -31,7 +31,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('easyVscGuiForDsh.openInBrowser', () => openInBrowser()),
     vscode.commands.registerCommand('easyVscGuiForDsh.syncPortToPlugin', () => syncPortToPlugin()),
     vscode.commands.registerCommand('easyVscGuiForDsh.syncPortToDsh', () => syncPortToDsh()),
-    vscode.commands.registerCommand('easyVscGuiForDsh.refresh', () => updateSidePanel())
+    vscode.commands.registerCommand('easyVscGuiForDsh.refresh', () => updateSidePanel()),
+    vscode.commands.registerCommand('easyVscGuiForDsh.forceStopDsh', () => forceStopDsh()),
+    vscode.commands.registerCommand('easyVscGuiForDsh.startAndRefresh', () => startDshAndRefresh())
   );
 
   context.subscriptions.push(
@@ -120,6 +122,12 @@ async function openSidePanel(state: SidePanelState = 'webui'): Promise<void> {
         case 'retry':
           void openDshGui(workspaceAdapter);
           break;
+        case 'forceStopDsh':
+          void forceStopDsh();
+          break;
+        case 'startAndRefresh':
+          void startDshAndRefresh();
+          break;
       }
     });
   }
@@ -185,10 +193,12 @@ function sidePanelHtml(state: SidePanelState, message?: string): string {
 </head>
 <body class="${bodyClass}">
 <div id="toolbar">
+  <button id="startRefresh">启动并刷新</button>
   <button id="refresh">刷新</button>
   <button id="browser">浏览器打开</button>
   <button id="sync">同步本地端口</button>
   <button id="stop">停止 dsh</button>
+  <button id="forceStop" style="color:#f14c4c;border-color:#f14c4c">强制终止</button>
 </div>
 ${contentHtml}
 <script nonce="${nonce}">
@@ -198,10 +208,12 @@ ${contentHtml}
   if (frame) {
     frame.addEventListener('load', () => { if (loading) loading.style.display = 'none'; });
   }
+  document.getElementById('startRefresh')?.addEventListener('click', () => vscode.postMessage({type:'startAndRefresh'}));
   document.getElementById('refresh')?.addEventListener('click', () => vscode.postMessage({type:'refresh'}));
   document.getElementById('browser')?.addEventListener('click', () => vscode.postMessage({type:'openInBrowser'}));
   document.getElementById('sync')?.addEventListener('click', () => vscode.postMessage({type:'syncPortToPlugin'}));
   document.getElementById('stop')?.addEventListener('click', () => vscode.postMessage({type:'stopDsh'}));
+  document.getElementById('forceStop')?.addEventListener('click', () => vscode.postMessage({type:'forceStopDsh'}));
   document.getElementById('retryBtn')?.addEventListener('click', () => vscode.postMessage({type:'retry'}));
   window.addEventListener('message', (event) => {
     const msg = event.data;
@@ -277,6 +289,52 @@ async function stopDsh(): Promise<void> {
     vscode.window.showInformationMessage('已停止插件启动的 dsh。');
     await updateStatusBar();
   }
+}
+
+async function forceStopDsh(): Promise<void> {
+  const status = await serviceManager.getStatus();
+  if (status.state !== 'running') {
+    vscode.window.showInformationMessage('当前没有检测到运行中的 dsh 进程。');
+    return;
+  }
+  const port = status.port;
+
+  const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem>();
+  quickPick.title = '强制终止 dsh';
+  quickPick.placeholder = '请勾选确认框，然后按 Enter 确认强制终止';
+  quickPick.canSelectMany = true;
+  quickPick.ignoreFocusOut = true;
+  quickPick.items = [
+    {
+      label: '$(warning) 我已知晓风险，确认强制终止 dsh',
+      description: `强制终止端口 ${port} 上的 dsh 进程，可能中断正在进行的会话/任务`,
+      picked: false,
+    },
+  ];
+
+  quickPick.onDidAccept(() => {
+    if (quickPick.selectedItems.length === 0) {
+      vscode.window.showWarningMessage('请先勾选确认框后再确认强制终止。');
+      quickPick.show();
+      return;
+    }
+    quickPick.hide();
+    void (async () => {
+      try {
+        const killed = await serviceManager.forceKillOnPort(port);
+        vscode.window.showInformationMessage(`已强制终止 ${killed.length} 个 dsh 进程（端口 ${port}）。`);
+        await updateStatusBar();
+      } catch (err) {
+        vscode.window.showErrorMessage(`强制终止失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  });
+  quickPick.onDidHide(() => quickPick.dispose());
+  quickPick.show();
+}
+
+async function startDshAndRefresh(): Promise<void> {
+  await openDshGui(workspaceAdapter);
 }
 
 async function syncPortToPlugin(): Promise<void> {

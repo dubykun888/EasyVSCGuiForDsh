@@ -29,7 +29,9 @@
     "onCommand:easyVscGuiForDsh.stopDsh",
     "onCommand:easyVscGuiForDsh.openInBrowser",
     "onCommand:easyVscGuiForDsh.syncPortToPlugin",
-    "onCommand:easyVscGuiForDsh.syncPortToDsh"
+    "onCommand:easyVscGuiForDsh.syncPortToDsh",
+    "onCommand:easyVscGuiForDsh.forceStopDsh",
+    "onCommand:easyVscGuiForDsh.startAndRefresh"
   ],
   "contributes": {
     "commands": [
@@ -68,6 +70,18 @@
         "title": "Refresh DSH Sidebar",
         "category": "DSH",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "easyVscGuiForDsh.forceStopDsh",
+        "title": "Force Stop DSH (Risk)",
+        "category": "DSH",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "easyVscGuiForDsh.startAndRefresh",
+        "title": "Start DSH and Refresh",
+        "category": "DSH",
+        "icon": "$(play)"
       }
     ],
     "menus": {

@@ -80,6 +80,87 @@ export class DshServiceManager {
     return this.managedProcess;
   }
 
+  async forceKillOnPort(port: number): Promise<number[]> {
+    const killed: number[] = [];
+
+    // Kill the plugin-managed dsh if it is on this port.
+    if (this.managedProcess && this.managedProcessPort() === port) {
+      const proc = this.managedProcess;
+      this.managedProcess = undefined;
+      await this.killProcessTree(proc);
+      killed.push(proc.pid);
+    }
+
+    // Find and kill any other process listening on the port.
+    const pids = await this.findPidsOnPort(port);
+    for (const pid of pids) {
+      if (killed.includes(pid)) {
+        continue;
+      }
+      try {
+        await this.killPid(pid);
+        killed.push(pid);
+      } catch (err) {
+        log(`Failed to kill PID ${pid}: ${String(err)}`);
+      }
+    }
+
+    this.onDidChangeEmitter.fire();
+    return killed;
+  }
+
+  private findPidsOnPort(port: number): Promise<number[]> {
+    return new Promise((resolve) => {
+      if (process.platform === 'win32') {
+        childProcess.exec(`netstat -ano -p tcp`, { windowsHide: true, timeout: 5000 }, (err, stdout) => {
+          if (err) {
+            resolve([]);
+            return;
+          }
+          const pids = new Set<number>();
+          const re = new RegExp(`TCP\\s+[^\\s]+:${port}\\s+[^\\s]+\\s+LISTENING\\s+(\\d+)`, 'i');
+          for (const line of stdout.split(/\r?\n/)) {
+            const m = re.exec(line);
+            if (m) {
+              const pid = Number(m[1]);
+              if (Number.isInteger(pid) && pid > 0) {
+                pids.add(pid);
+              }
+            }
+          }
+          resolve([...pids]);
+        });
+      } else {
+        childProcess.exec(`lsof -ti tcp:${port}`, { timeout: 5000 }, (err, stdout) => {
+          if (err) {
+            resolve([]);
+            return;
+          }
+          const pids = stdout
+            .split(/\r?\n/)
+            .map((line) => Number(line.trim()))
+            .filter((pid) => Number.isInteger(pid) && pid > 0);
+          resolve([...new Set(pids)]);
+        });
+      }
+    });
+  }
+
+  private killPid(pid: number): Promise<void> {
+    return new Promise((resolve) => {
+      if (process.platform === 'win32') {
+        childProcess.exec(`taskkill /PID ${pid} /T /F`, { windowsHide: true }, () => resolve());
+      } else {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // fall through
+        }
+        resolve();
+      }
+    });
+  }
+
   async syncLocalPortToPlugin(): Promise<number | undefined> {
     const cfg = getConfig();
     const localPort = await findLocalDshDefaultPort(cfg.dshCommand);
