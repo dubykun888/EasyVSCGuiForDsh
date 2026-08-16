@@ -1,6 +1,9 @@
 # Easy VSC GUI for DSH
 
+一个用来在VS code中启动deepseek harness的插件
+方便大肥鱼更快地炫白饭
 在 VS Code 辅助侧栏（右侧）内嵌 DeepSeek Harness (dsh) WebUI，提供快速打开、自动启动/连接、端口同步、主题跟随与工作区感知能力。
+理论上应该能适配修改dsh webui的插件
 
 ![Preview](https://raw.githubusercontent.com/dubykun888/EasyVSCGuiForDsh/main/media/logo.png)
 
