@@ -21,4 +21,10 @@ suite('EasyVSCGuiForDsh Extension', () => {
     assert.strictEqual(cfg.get<number>('port'), 3080);
     assert.strictEqual(cfg.get<string>('startMode'), 'auto');
   });
+
+  test('open command should complete against a running dsh', async function () {
+    this.timeout(30000);
+    // In the test environment dsh is expected to be running on 3080.
+    await vscode.commands.executeCommand('easyVscGuiForDsh.open');
+  });
 });
