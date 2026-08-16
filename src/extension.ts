@@ -7,6 +7,7 @@ import { WorkspaceAdapter } from './workspace/WorkspaceAdapter';
 import { log, showOutput } from './util/logger';
 
 let serviceManager: DshServiceManager;
+let workspaceAdapter: WorkspaceAdapter;
 let statusBarItem: vscode.StatusBarItem;
 let sidePanel: vscode.WebviewPanel | undefined;
 let proxy: DshProxy | undefined;
@@ -14,11 +15,13 @@ let currentPort = 3080;
 let currentBaseUrl = '';
 let currentSessionId: string | undefined;
 
+type SidePanelState = 'loading' | 'webui' | 'error';
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   log('Easy VSC GUI for DSH activating');
 
   serviceManager = new DshServiceManager();
-  const workspaceAdapter = new WorkspaceAdapter();
+  workspaceAdapter = new WorkspaceAdapter();
 
   currentPort = getConfig().port;
 
@@ -57,25 +60,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   log('Easy VSC GUI for DSH activated');
 }
 
-async function openDshGui(workspaceAdapter: WorkspaceAdapter): Promise<void> {
+async function openDshGui(adapter: WorkspaceAdapter): Promise<void> {
+  // Show the side panel immediately with a loading state while dsh is checked/started.
+  await openSidePanel('loading');
   try {
-    const workspaceInfo = await workspaceAdapter.getWorkspaceInfo();
+    const workspaceInfo = await adapter.getWorkspaceInfo();
     const result = await serviceManager.ensureDshRunning(workspaceInfo.folder?.uri.fsPath);
     currentPort = result.port;
     const cfg = getConfig();
     currentSessionId = cfg.autoOpenLastChat ? workspaceInfo.lastSessionId : undefined;
     await updateProxyForTheme();
-    updateSidePanel();
+    renderSidePanel('webui');
 
     if (cfg.autoOpenLastChat && workspaceInfo.isDshWorkspace) {
       log(`Workspace detected, dsh started with cwd=${workspaceInfo.folder?.uri.fsPath}, session=${currentSessionId ?? 'none'}`);
     }
 
-    await openSidePanel();
     await updateStatusBar();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`Open DSH failed: ${message}`);
+    renderSidePanel('error', message);
     const action = await vscode.window.showErrorMessage(`无法打开 DSH：${message}`, '查看日志', '重新指定端口');
     if (action === '查看日志') {
       showOutput();
@@ -85,7 +90,7 @@ async function openDshGui(workspaceAdapter: WorkspaceAdapter): Promise<void> {
   }
 }
 
-async function openSidePanel(): Promise<void> {
+async function openSidePanel(state: SidePanelState = 'webui'): Promise<void> {
   if (sidePanel) {
     sidePanel.reveal(vscode.ViewColumn.Beside);
   } else {
@@ -112,10 +117,13 @@ async function openSidePanel(): Promise<void> {
         case 'refresh':
           updateSidePanel();
           break;
+        case 'retry':
+          void openDshGui(workspaceAdapter);
+          break;
       }
     });
   }
-  updateSidePanel();
+  renderSidePanel(state);
   // Move the editor/webview into the secondary side bar (right auxiliary bar).
   try {
     await vscode.commands.executeCommand('workbench.action.moveEditorToSecondarySideBar');
@@ -125,17 +133,35 @@ async function openSidePanel(): Promise<void> {
 }
 
 function updateSidePanel(): void {
+  renderSidePanel('webui');
+}
+
+function renderSidePanel(state: SidePanelState, message?: string): void {
   if (!sidePanel) {
     return;
   }
-  sidePanel.webview.html = sidePanelHtml();
+  sidePanel.webview.html = sidePanelHtml(state, message);
 }
 
-function sidePanelHtml(): string {
+function sidePanelHtml(state: SidePanelState, message?: string): string {
   const nonce = getNonce();
   const url = buildFrameUrl();
   const theme = getWebviewTheme();
   const bodyClass = theme === 'dark' || theme === 'high-contrast' ? 'vscode-dark' : 'vscode-light';
+
+  let contentHtml: string;
+  if (state === 'loading') {
+    contentHtml = `<div id="stateView"><div class="spinner"></div><div id="stateText">正在启动 dsh，请稍候…</div></div>`;
+  } else if (state === 'error') {
+    const safeMessage = escapeHtml(message ?? '未知错误');
+    contentHtml = `<div id="stateView"><div id="stateText">启动失败：${safeMessage}</div><button id="retryBtn">重试</button></div>`;
+  } else {
+    contentHtml = `<div id="frameWrap">
+      <div id="loading">Loading DSH…</div>
+      <iframe id="dshFrame" src="${url}" allow="clipboard-read; clipboard-write"></iframe>
+    </div>`;
+  }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -151,6 +177,10 @@ function sidePanelHtml(): string {
   #frameWrap{position:relative;height:calc(100% - 37px)}
   iframe{width:100%;height:100%;border:none;display:block}
   #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--vscode-descriptionForeground,#888)}
+  #stateView{height:calc(100% - 37px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--vscode-descriptionForeground,#888)}
+  .spinner{width:28px;height:28px;border:3px solid var(--vscode-button-border,#ccc);border-top-color:var(--vscode-button-background,#333);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #retryBtn{background:var(--vscode-button-background,#333);color:var(--vscode-button-foreground,#fff);border:none;padding:6px 16px;border-radius:4px;cursor:pointer}
 </style>
 </head>
 <body class="${bodyClass}">
@@ -160,30 +190,39 @@ function sidePanelHtml(): string {
   <button id="sync">同步本地端口</button>
   <button id="stop">停止 dsh</button>
 </div>
-<div id="frameWrap">
-  <div id="loading">Loading DSH…</div>
-  <iframe id="dshFrame" src="${url}" allow="clipboard-read; clipboard-write"></iframe>
-</div>
+${contentHtml}
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   const frame = document.getElementById('dshFrame');
   const loading = document.getElementById('loading');
-  frame.addEventListener('load', () => { loading.style.display = 'none'; });
-  document.getElementById('refresh').addEventListener('click', () => vscode.postMessage({type:'refresh'}));
-  document.getElementById('browser').addEventListener('click', () => vscode.postMessage({type:'openInBrowser'}));
-  document.getElementById('sync').addEventListener('click', () => vscode.postMessage({type:'syncPortToPlugin'}));
-  document.getElementById('stop').addEventListener('click', () => vscode.postMessage({type:'stopDsh'}));
+  if (frame) {
+    frame.addEventListener('load', () => { if (loading) loading.style.display = 'none'; });
+  }
+  document.getElementById('refresh')?.addEventListener('click', () => vscode.postMessage({type:'refresh'}));
+  document.getElementById('browser')?.addEventListener('click', () => vscode.postMessage({type:'openInBrowser'}));
+  document.getElementById('sync')?.addEventListener('click', () => vscode.postMessage({type:'syncPortToPlugin'}));
+  document.getElementById('stop')?.addEventListener('click', () => vscode.postMessage({type:'stopDsh'}));
+  document.getElementById('retryBtn')?.addEventListener('click', () => vscode.postMessage({type:'retry'}));
   window.addEventListener('message', (event) => {
     const msg = event.data;
-    if (msg && msg.type === 'setUrl') {
+    if (msg && msg.type === 'setUrl' && frame) {
       frame.src = msg.url;
-      loading.style.display = 'flex';
+      if (loading) loading.style.display = 'flex';
     }
   });
   vscode.postMessage({type:'ready'});
 </script>
 </body>
 </html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function directUrl(port: number): string {
